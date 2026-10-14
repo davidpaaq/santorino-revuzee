@@ -16,7 +16,6 @@ from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from playwright.sync_api import sync_playwright
 
 LIST_URL = os.environ.get("REVUZEE_LIST_URL", "https://revuzee.link/revuzeeCardsList.php")
 PLACE_ID = os.environ.get("PLACE_ID", "ChIJQQ1RKQDhro4R7oT2ljBEgaE")
@@ -95,6 +94,8 @@ def login_si_hace_falta(page):
 
 
 def leer_revuzee():
+    from playwright.sync_api import sync_playwright
+
     filas = []
     with sync_playwright() as p:
         browser = p.chromium.launch()
@@ -195,13 +196,18 @@ def escribir(path, campos, nuevas):
 def main():
     estado = {"fecha": HOY, "hora": datetime.now(ZoneInfo("America/Santo_Domingo")).strftime("%H:%M"), "revuzee": "pendiente", "google": "pendiente"}
     errores = []
-    try:
-        tarjetas = leer_revuzee()
-        escribir(DATOS / "historial.csv", ["fecha_captura", "id_tarjeta", "apodo", "semana_pasada", "mes_pasado", "anio_pasado", "total"], tarjetas)
-        estado["revuzee"] = f"ok ({len(tarjetas)} tarjetas activas)"
-    except Exception as e:  # noqa: BLE001
-        estado["revuzee"] = f"error: {e}"
-        errores.append(e)
+    # Revuzee tiene verificación de Cloudflare en el login: no se captura desde GitHub.
+    # La tarea programada de Claude lo lee desde el Chrome de David y actualiza datos/historial.csv.
+    if os.environ.get("REVUZEE_DESDE_GITHUB") == "1":
+        try:
+            tarjetas = leer_revuzee()
+            escribir(DATOS / "historial.csv", ["fecha_captura", "id_tarjeta", "apodo", "semana_pasada", "mes_pasado", "anio_pasado", "total"], tarjetas)
+            estado["revuzee"] = f"ok ({len(tarjetas)} tarjetas activas)"
+        except Exception as e:  # noqa: BLE001
+            estado["revuzee"] = f"error: {e}"
+            errores.append(e)
+    else:
+        estado["revuzee"] = "se captura desde Chrome (tarea de Claude)"
     try:
         g = leer_google()
         escribir(DATOS / "google.csv", ["fecha_captura", "calificacion", "total_resenas"], [g])
